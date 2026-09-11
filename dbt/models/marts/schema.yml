@@ -1,0 +1,69 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: "Dimensão de clientes com métricas agregadas"
+    columns:
+      - name: customer_id
+        description: "Identificador único do cliente"
+        tests:
+          - unique
+          - not_null
+      - name: first_name
+        description: "Primeiro nome do cliente"
+      - name: last_name
+        description: "Sobrenome do cliente"
+      - name: email
+        description: "E-mail do cliente"
+        tests:
+          - unique
+          - not_null
+      - name: total_orders
+        description: "Total de pedidos do cliente"
+      - name: total_spent
+        description: "Valor total gasto pelo cliente"
+      - name: customer_segment
+        description: "Segmento do cliente (VIP, Recorrente, Novo)"
+
+  - name: dim_products
+    description: "Dimensão de produtos com métricas de vendas"
+    columns:
+      - name: product_id
+        description: "Identificador único do produto"
+        tests:
+          - unique
+          - not_null
+      - name: product_name
+        description: "Nome do produto"
+      - name: category
+        description: "Categoria do produto"
+      - name: price
+        description: "Preço do produto"
+      - name: times_sold
+        description: "Quantidade de vezes que o produto foi vendido"
+      - name: total_quantity_sold
+        description: "Quantidade total vendida"
+      - name: total_revenue
+        description: "Receita total gerada pelo produto"
+
+  - name: fact_orders
+    description: "Tabela fato de pedidos"
+    columns:
+      - name: order_id
+        description: "Identificador único do pedido"
+        tests:
+          - not_null
+      - name: customer_id
+        description: "Identificador do cliente"
+        tests:
+          - not_null
+      - name: product_id
+        description: "Identificador do produto"
+        tests:
+          - not_null
+      - name: quantity
+        description: "Quantidade solicitada"
+      - name: unit_price
+        description: "Preço unitário"
+      - name: total_price
+        description: "Preço total do item"

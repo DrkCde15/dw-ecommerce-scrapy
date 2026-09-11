@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: ecommerce_dw_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ecommerce
+      POSTGRES_USER: ecommerce
+      POSTGRES_PASSWORD: ecommerce123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init/01_init_schema.sql:/docker-entrypoint-initdb.d/01_init_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecommerce -d ecommerce"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

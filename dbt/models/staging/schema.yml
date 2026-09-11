@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: stg_orders
+    description: "Modelo de estagiação de pedidos"
+    columns:
+      - name: order_id
+        description: "Identificador único do pedido"
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: "Identificador do cliente"
+        tests:
+          - not_null
+      - name: order_date
+        description: "Data do pedido"
+        tests:
+          - not_null
+      - name: status
+        description: "Status do pedido"
+
+  - name: stg_customers
+    description: "Modelo de estagiação de clientes"
+    columns:
+      - name: customer_id
+        description: "Identificador único do cliente"
+        tests:
+          - unique
+          - not_null
+      - name: email
+        description: "E-mail do cliente"
+        tests:
+          - unique
+          - not_null
+
+  - name: stg_products
+    description: "Modelo de estagiação de produtos"
+    columns:
+      - name: product_id
+        description: "Identificador único do produto"
+        tests:
+          - unique
+          - not_null
+      - name: product_name
+        description: "Nome do produto"
+        tests:
+          - not_null
+      - name: category
+        description: "Categoria do produto"
+      - name: price
+        description: "Preço do produto"
+        tests:
+          - not_null
+
+sources:
+  - name: raw
+    description: "Dados brutos do e-commerce"
+    schema: raw
+    tables:
+      - name: orders
+        description: "Tabela de pedidos"
+      - name: customers
+        description: "Tabela de clientes"
+      - name: products
+        description: "Tabela de produtos"
+      - name: order_items
+        description: "Tabela de itens de pedido"
