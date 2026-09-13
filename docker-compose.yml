@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:16
-    container_name: ecommerce_dw_postgres
     restart: unless-stopped
     ports:
       - "5432:5432"

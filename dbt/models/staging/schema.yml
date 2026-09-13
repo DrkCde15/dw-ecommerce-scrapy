@@ -53,6 +53,29 @@ models:
         tests:
           - not_null
 
+  - name: stg_books
+    description: "Modelo de estagiação de livros raspados via Scrapy"
+    columns:
+      - name: book_id
+        description: "Identificador único do livro"
+        tests:
+          - unique
+          - not_null
+      - name: book_name
+        description: "Nome do livro"
+        tests:
+          - not_null
+      - name: price
+        description: "Preço do livro"
+        tests:
+          - not_null
+      - name: rating
+        description: "Avaliação (1-5)"
+        tests:
+          - not_null
+      - name: category
+        description: "Categoria do livro"
+
 sources:
   - name: raw
     description: "Dados brutos do e-commerce"
@@ -66,3 +89,9 @@ sources:
         description: "Tabela de produtos"
       - name: order_items
         description: "Tabela de itens de pedido"
+      - name: books
+        description: "Livros raspados via Scrapy de books.toscrape.com"
+        loaded_at_field: scraped_at
+        freshness:
+          warn_after: {count: 7, period: day}
+          error_after: {count: 30, period: day}

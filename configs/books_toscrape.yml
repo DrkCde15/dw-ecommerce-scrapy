@@ -1,0 +1,43 @@
+# Configuracao para raspagem de livros em books.toscrape.com
+# Uso: scrapy crawl configurable -a config=configs/books_toscrape.yml
+
+name: "Books to Scrape"
+allowed_domains:
+  - books.toscrape.com
+
+start_url: "https://books.toscrape.com/catalogue/category/books_1/index.html"
+
+selectors:
+  item: "article.product_pod"
+
+  fields:
+    product_id:
+      css: "h3 a"
+      attr: "href"
+      processors:
+        - strip
+
+    name:
+      css: "h3 a"
+      attr: "title"
+
+    price:
+      css: "p.price_color"
+      processors:
+        - clean_price
+
+    rating:
+      css: "p.star-rating"
+      attr: "class"
+
+    image_url:
+      css: "img.thumbnail"
+      attr: "src"
+
+    url:
+      css: "h3 a"
+      attr: "href"
+
+pagination:
+  next: "li.next a::attr(href)"
+  max_pages: 5

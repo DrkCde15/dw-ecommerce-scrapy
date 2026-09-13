@@ -26,26 +26,17 @@ Scrapy (scraping) → PostgreSQL (raw) → dbt (staging → intermediate → mar
 | Transformacao | dbt 1.9 | Modelagem de dados |
 | Analise | Jupyter + pandas | Exploracao de dados |
 
-## Tabelas
-
-| Tipo | Tabela | Fonte |
-|------|--------|-------|
-| Dimensao | `dim_customers` | raw.customers |
-| Dimensao | `dim_products` | raw.products |
-| Fato | `fact_orders` | raw.orders + raw.order_items |
-| Scraping | `raw.books` | books.toscrape.com |
-
 ## Pre-requisitos
 
 - Python 3.9+
-- Docker + Docker Compose
+- Podman + podman-compose
 - dbt-postgres
 
 ## Instalacao
 
 ```bash
 # 1. Subir PostgreSQL
-docker compose up -d
+podman-compose up -d
 
 # 2. Instalar dependencias
 pip install -r requirements.txt
@@ -68,39 +59,70 @@ ecommerce_dw:
       host: localhost
       port: 5432
       dbname: ecommerce
-      user: ecommerce
-      password: ecommerce123
+      user: postgres
+      password: postgres
       schema: public
 ```
 
 ## Web Scraping
 
-### Scraping com injecao no PostgreSQL
+### Spiders Disponiveis
+
+| Spider | Descricao | Uso |
+|--------|-----------|-----|
+| `books` | Livros de books.toscrape.com | `scrapy crawl books` |
+| `mercadolivre` | Produtos do Mercado Livre (API publica) | `scrapy crawl mercadolivre -a query="iphone"` |
+| `amazon` | Produtos da Amazon.com.br | `scrapy crawl amazon -a query="notebook"` |
+| `configurable` | Generico via JSON/YAML | `scrapy crawl configurable -a config=configs/example.yml` |
+| `products` | Generico para e-commerce | `scrapy crawl products -a url=URL` |
+
+### Exemplos de Uso
 
 ```bash
-# Subir banco
-docker compose up -d
-
-# Raspar livros e salvar direto no PostgreSQL
+# Raspar livros e salvar no PostgreSQL
 scrapy crawl books
 
-# Raspar e salvar so em JSON (sem banco)
+# Raspar celulares no Mercado Livre
+scrapy crawl mercadolivre -a query="celular" -a limit=100
+
+# Raspar notebooks na Amazon
+scrapy crawl amazon -a query="notebook" -a pages=3
+
+# Raspar com configuracao personalizada
+scrapy crawl configurable -a config=configs/books_toscrape.yml
+
+# Salvar apenas em JSON
 scrapy crawl books -o data/books.json
 ```
 
-### Scraping generico
+### Configuracoes
 
-```bash
-# Raspar produtos de um site
-scrapy crawl products -a url="https://site.com/produtos" -a category=eletronicos
+Arquivos de configuracao na pasta `configs/`:
+
+| Arquivo | Descricao |
+|---------|-----------|
+| `books_toscrape.yml` | Config para books.toscrape.com |
+| `mercadolivre_celulares.json` | Config para Mercado Livre |
+
+Exemplo de configuracao YAML:
+
+```yaml
+name: "Meu Spider"
+allowed_domains: ["example.com"]
+start_url: "https://example.com/produtos"
+selectors:
+  item: "div.product"
+  fields:
+    name:
+      css: "h2.title"
+    price:
+      css: "span.price"
+      processors:
+        - clean_price
+pagination:
+  next: "a.next::attr(href)"
+  max_pages: 5
 ```
-
-### Spiders Disponiveis
-
-| Spider | Descricao | Salva em |
-|--------|-----------|----------|
-| `books` | Livros de books.toscrape.com | PostgreSQL (`raw.books`) |
-| `products` | Generico para e-commerce | JSON/Parquet |
 
 ### Pipelines
 
@@ -110,15 +132,6 @@ scrapy crawl products -a url="https://site.com/produtos" -a category=eletronicos
 | `ValidationPipeline` | 200 | Rejeita campos obrigatorios faltando |
 | `DuplicatesFilterPipeline` | 300 | Remove duplicatas por product_id |
 | `PostgresPipeline` | 400 | Insere dados no PostgreSQL (batch) |
-
-### Configuracao do PostgreSQL
-
-Via `settings.py` ou variaveis de ambiente:
-
-```python
-POSTGRES_URL = "postgresql://ecommerce:ecommerce123@localhost:5432/ecommerce"
-POSTGRES_TABLE = "raw.books"
-```
 
 ### Testes
 
@@ -136,6 +149,9 @@ pytest tests/scraping/ --cov=src/scraping
 # Rodar todos os modelos
 dbt run
 
+# Rodar apenas stg_books e dim_books
+dbt run --select stg_books dim_books
+
 # Rodar testes
 dbt test
 
@@ -143,20 +159,27 @@ dbt test
 dbt docs generate && dbt docs serve
 ```
 
-## Docker
+### Modelos de Livros
+
+| Modelo | Camada | Descricao |
+|--------|--------|-----------|
+| `stg_books` | Staging | Limpa e normaliza dados de `raw.books` |
+| `dim_books` | Marts | Metricas por livro e comparacao com categoria |
+
+## Podman
 
 ```bash
 # Subir PostgreSQL
-docker compose up -d
+podman-compose up -d
 
 # Parar
-docker compose down
+podman-compose down
 
 # Ver logs
-docker compose logs postgres
+podman-compose logs postgres
 
 # Acessar psql
-docker compose exec postgres psql -U ecommerce -d ecommerce
+podman exec -it postgres psql -U postgres -d ecommerce
 ```
 
 ## Estrutura do Projeto
@@ -166,22 +189,36 @@ docker compose exec postgres psql -U ecommerce -d ecommerce
 ├── docker-compose.yml
 ├── scrapy.cfg
 ├── requirements.txt
+├── configs/
+│   ├── books_toscrape.yml
+│   └── mercadolivre_celulares.json
 ├── src/scraping/
 │   └── ecommerce_scraper/
 │       ├── settings.py
 │       ├── pipelines.py
 │       └── spiders/
-│           ├── products_spider.py
-│           └── books_spider.py
+│           ├── books_spider.py
+│           ├── mercadolivre_spider.py
+│           ├── amazon_spider.py
+│           ├── configurable_spider.py
+│           └── products_spider.py
 ├── sql/
 │   ├── init/
-│   │   └── 01_init_schema.sql
+│   │   └── init_schema.sql
 │   ├── staging/
 │   ├── intermediate/
 │   └── marts/
+├── scripts/
+│   └── load_books.py
 ├── dbt/
 │   ├── dbt_project.yml
 │   └── models/
+│       ├── staging/
+│       │   ├── schema.yml
+│       │   └── stg_books.sql
+│       └── marts/
+│           ├── schema.yml
+│           └── dim_books.sql
 ├── data/
 ├── notebooks/
 └── tests/
@@ -197,4 +234,54 @@ docker compose exec postgres psql -U ecommerce -d ecommerce
 1. `stg_customers` → `dim_customers`
 2. `stg_products` → `dim_products`
 3. `stg_orders` + `int_order_items` → `fact_orders`
-4. `raw.books` → (futuro) `dim_books`
+4. `raw.books` → `stg_books` → `dim_books`
+
+---
+
+## Roadmap
+
+### 1. Novos Spiders (curto prazo)
+
+- [x] Spider para Mercado Livre (API publica)
+- [x] Spider para Amazon.com.br
+- [x] Spider generico configuravel via JSON/YAML
+- [ ] Integrar spiders ao dbt (stg_mercadolivre, dim_products_ml)
+- [ ] Spider para Magazine Luiza
+- [ ] Spider para Americanas
+
+### 2. Integracao scraping-dbt (curto prazo)
+
+- [x] Criar stg_books no dbt
+- [x] Criar dim_books com metricas
+- [ ] Criar stg_mercadolivre
+- [ ] Criar dim_mercadolivre
+- [ ] Criar stg_amazon
+- [ ] Criar dim_amazon
+
+### 3. Automacao (medio prazo)
+
+- [ ] DAG no Airflow ou cron para rodar scraping diario
+- [ ] Schedule de `dbt run` apos scraping
+- [ ] Alertas quando scraping falhar
+- [ ] Notificacao via Telegram/Slack
+
+### 4. Data Quality (medio prazo)
+
+- [ ] Great Expectations ou pandera para validar dados antes de ingerir
+- [ ] Testes de consistencia entre scraping e banco
+- [ ] Monitoreamento de volume de dados
+- [ ] Alertas de anomalias (precos, volume, etc)
+
+### 5. Visualizacao (medio/longo prazo)
+
+- [ ] Dashboard com Metabase ou Superset conectado ao DW
+- [ ] Notebooks com analises automatizadas
+- [ ] Relatorios periodicos via email
+- [ ] KPIs de e-commerce (ticket medio, conversao, etc)
+
+### 6. Infraestrutura (longo prazo)
+
+- [ ] CI/CD no GitHub Actions (testes automaticos)
+- [ ] Deploy do Airflow no Docker
+- [ ] Backup automatico do PostgreSQL
+- [ ] Monitoramento com Prometheus + Grafana
