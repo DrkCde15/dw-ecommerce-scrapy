@@ -64,3 +64,55 @@ CREATE TABLE IF NOT EXISTS raw.books (
     source TEXT,
     scraped_at TIMESTAMP
 );
+
+-- Tabela de produtos Americanas (raspados via VTEX API)
+CREATE TABLE IF NOT EXISTS raw.americanas (
+    id SERIAL PRIMARY KEY,
+    product_id VARCHAR(50),
+    name VARCHAR(500),
+    brand VARCHAR(200),
+    price DECIMAL(10,2),
+    list_price DECIMAL(10,2),
+    available_quantity INTEGER,
+    category VARCHAR(500),
+    image_url TEXT,
+    url TEXT,
+    seller VARCHAR(200),
+    source VARCHAR(50),
+    scraped_at TIMESTAMP
+);
+
+-- Tabela de produtos KaBuM (raspados via API interna)
+CREATE TABLE IF NOT EXISTS raw.kabum (
+    id SERIAL PRIMARY KEY,
+    product_id VARCHAR(50),
+    name VARCHAR(500),
+    brand VARCHAR(200),
+    price DECIMAL(10,2),
+    old_price DECIMAL(10,2),
+    discount_percentage INTEGER,
+    stock INTEGER,
+    category VARCHAR(500),
+    image_url TEXT,
+    url TEXT,
+    seller VARCHAR(200),
+    rating DECIMAL(3,1),
+    reviews_count INTEGER,
+    source VARCHAR(50),
+    scraped_at TIMESTAMP
+);
+
+-- Tabela de produtos Amazon (raspados via HTML)
+CREATE TABLE IF NOT EXISTS raw.amazon (
+    id SERIAL PRIMARY KEY,
+    product_id VARCHAR(50),
+    name VARCHAR(500),
+    price DECIMAL(10,2),
+    original_price DECIMAL(10,2),
+    rating DECIMAL(3,1),
+    reviews_count INTEGER,
+    image_url TEXT,
+    url TEXT,
+    source VARCHAR(50),
+    scraped_at TIMESTAMP
+);

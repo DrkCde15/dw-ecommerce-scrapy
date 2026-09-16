@@ -46,7 +46,7 @@ ITEM_PIPELINES = {
 }
 
 # PostgreSQL (ativar conforme necessario)
-POSTGRES_URL = "postgresql://ecommerce:ecommerce123@localhost:5432/ecommerce"
+POSTGRES_URL = "postgresql://postgres:postgres@localhost:5432/ecommerce"
 POSTGRES_TABLE = "raw.books"
 
 # Exportacao
