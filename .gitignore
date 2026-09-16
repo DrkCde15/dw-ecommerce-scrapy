@@ -13,6 +13,7 @@ venv/
 data/
 *.json
 *.parquet
+logs/
 
 # IDE
 .vscode/

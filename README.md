@@ -25,6 +25,7 @@ Scrapy (scraping) → PostgreSQL (raw) → dbt (staging → intermediate → mar
 | Pipeline | SQLAlchemy | Injecao direta no PostgreSQL |
 | Banco | PostgreSQL 16 | Data Warehouse |
 | Transformacao | dbt 1.9 | Modelagem de dados |
+| Orquestracao | Airflow 2.10 | DAGs e agendamento |
 | Analise | Jupyter + pandas | Exploracao de dados |
 
 ## Pre-requisitos
@@ -36,7 +37,7 @@ Scrapy (scraping) → PostgreSQL (raw) → dbt (staging → intermediate → mar
 ## Instalacao
 
 ```bash
-# 1. Subir PostgreSQL
+# 1. Subir PostgreSQL + Airflow
 podman-compose up -d
 
 # 2. Instalar dependencias
@@ -45,6 +46,9 @@ pip install -r requirements.txt
 # 3. Configurar dbt
 cd dbt
 dbt deps
+
+# 4. Acessar Airflow
+# http://localhost:8080 (admin/admin)
 ```
 
 ## Configuracao dbt
@@ -176,6 +180,51 @@ dbt docs generate && dbt docs serve
 | `dim_books` | Marts | books | Metricas por livro |
 | `dim_products` | Marts | todas | Tabela unificada de produtos |
 
+## Airflow
+
+### Acessos
+
+| Servico | URL | Credenciais |
+|---------|-----|-------------|
+| Airflow Webserver | http://localhost:8080 | admin / admin |
+| PostgreSQL | localhost:5432 | postgres / postgres |
+
+### DAG `ecommerce_etl`
+
+Executa todos os 4 spiders (books, amazon, americanas, kabum) e salva no PostgreSQL via `PostgresPipeline`.
+
+- **Agendamento**: Diario as 6h
+- **Spiders**: books (query=all), amazon/americanas/kabum (query=notebook, limit=50)
+
+### Comandos uteis
+
+```bash
+# Ver status dos containers
+podman ps
+
+# Ver logs do Airflow
+podman logs ecommerce_airflow_webserver
+podman logs ecommerce_airflow_scheduler
+
+# Listar DAGs
+podman exec ecommerce_airflow_webserver airflow dags list
+
+# Ativar DAG
+podman exec ecommerce_airflow_webserver airflow dags unpause ecommerce_etl
+
+# Rodar DAG manualmente
+podman exec ecommerce_airflow_webserver airflow dags trigger ecommerce_etl
+
+# Ver status da execucao
+podman exec ecommerce_airflow_webserver airflow tasks states-for-dag-run ecommerce_etl <run_id>
+
+# Parar tudo
+podman-compose down
+
+# Parar e limpar volumes
+podman-compose down -v
+```
+
 ## Podman
 
 ```bash
@@ -199,6 +248,13 @@ podman exec -it postgres psql -U postgres -d ecommerce
 ├── docker-compose.yml
 ├── scrapy.cfg
 ├── requirements.txt
+├── airflow/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── dags/
+│   │   ├── ecommerce_etl.py
+│   │   └── run_spiders.sh
+│   └── logs/
 ├── configs/
 │   ├── books_toscrape.yml
 │   └── mercadolivre_celulares.json
@@ -274,8 +330,8 @@ kabum.com.br       ──→ raw.kabum     ──→ stg_kabum     ──┘
 
 ### 3. Automacao (medio prazo)
 
-- [ ] DAG no Airflow ou cron para rodar scraping diario
-- [ ] Schedule de `dbt run` apos scraping
+- [x] DAG no Airflow para rodar scraping diario
+- [x] Schedule de `dbt run` apos scraping
 - [ ] Alertas quando scraping falhar
 - [ ] Notificacao via Telegram/Slack
 
@@ -296,6 +352,6 @@ kabum.com.br       ──→ raw.kabum     ──→ stg_kabum     ──┘
 ### 6. Infraestrutura (longo prazo)
 
 - [ ] CI/CD no GitHub Actions (testes automaticos)
-- [ ] Deploy do Airflow no Docker
+- [x] Deploy do Airflow no Docker
 - [ ] Backup automatico do PostgreSQL
 - [ ] Monitoramento com Prometheus + Grafana

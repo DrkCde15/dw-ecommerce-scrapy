@@ -78,6 +78,16 @@ class CleaningPipeline:
             cat_lower = item["category"].lower().strip()
             item["category"] = self.CATEGORY_MAP.get(cat_lower, item["category"].title())
 
+        # Converte rating de texto para numero (One->1, Two->2, etc.)
+        RATING_MAP = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+        if item.get("rating"):
+            if isinstance(item["rating"], str):
+                item["rating"] = RATING_MAP.get(item["rating"].lower().strip(), item["rating"])
+            try:
+                item["rating"] = int(item["rating"])
+            except (ValueError, TypeError):
+                item["rating"] = None
+
         # Garante que price e float (usa clean_price para formatos BR/US)
         if item.get("price"):
             if isinstance(item["price"], str):
