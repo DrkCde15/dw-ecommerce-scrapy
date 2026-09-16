@@ -21,6 +21,7 @@ Scrapy (scraping) → PostgreSQL (raw) → dbt (staging → intermediate → mar
 | Camada | Tecnologia | Descricao |
 |--------|------------|-----------|
 | Scraping | Scrapy 2.19 | Coleta de dados da web |
+| Browser | Playwright (opcional) | Sites com JS anti-bot |
 | Pipeline | SQLAlchemy | Injecao direta no PostgreSQL |
 | Banco | PostgreSQL 16 | Data Warehouse |
 | Transformacao | dbt 1.9 | Modelagem de dados |
@@ -28,7 +29,7 @@ Scrapy (scraping) → PostgreSQL (raw) → dbt (staging → intermediate → mar
 
 ## Pre-requisitos
 
-- Python 3.9+
+- Python 3.14+
 - Podman + podman-compose
 - dbt-postgres
 
@@ -68,22 +69,19 @@ ecommerce_dw:
 
 ### Spiders Disponiveis
 
-| Spider | Descricao | Uso |
-|--------|-----------|-----|
-| `books` | Livros de books.toscrape.com | `scrapy crawl books` |
-| `mercadolivre` | Produtos do Mercado Livre (API publica) | `scrapy crawl mercadolivre -a query="iphone"` |
-| `amazon` | Produtos da Amazon.com.br | `scrapy crawl amazon -a query="notebook"` |
-| `configurable` | Generico via JSON/YAML | `scrapy crawl configurable -a config=configs/example.yml` |
-| `products` | Generico para e-commerce | `scrapy crawl products -a url=URL` |
+| Spider | Status | Descricao | Uso |
+|--------|--------|-----------|-----|
+| `books` | Funcional | Livros de books.toscrape.com | `scrapy crawl books` |
+| `amazon` | Funcional | Produtos da Amazon.com.br | `scrapy crawl amazon -a query="notebook"` |
+| `configurable` | Funcional | Generico via JSON/YAML | `scrapy crawl configurable -a config=configs/example.yml` |
+| `mercadolivre` | Bloqueado | ML requer OAuth2 (login) | `scrapy crawl mercadolivre -a query="iphone"` |
+| `products` | Generico | Para e-commerce | `scrapy crawl products -a url=URL` |
 
 ### Exemplos de Uso
 
 ```bash
 # Raspar livros e salvar no PostgreSQL
 scrapy crawl books
-
-# Raspar celulares no Mercado Livre
-scrapy crawl mercadolivre -a query="celular" -a limit=100
 
 # Raspar notebooks na Amazon
 scrapy crawl amazon -a query="notebook" -a pages=3
@@ -242,10 +240,10 @@ podman exec -it postgres psql -U postgres -d ecommerce
 
 ### 1. Novos Spiders (curto prazo)
 
-- [x] Spider para Mercado Livre (API publica)
 - [x] Spider para Amazon.com.br
 - [x] Spider generico configuravel via JSON/YAML
-- [ ] Integrar spiders ao dbt (stg_mercadolivre, dim_products_ml)
+- [ ] Spider para Mercado Livre (requer OAuth2)
+- [ ] Integrar spiders ao dbt (stg_amazon, dim_products_amazon)
 - [ ] Spider para Magazine Luiza
 - [ ] Spider para Americanas
 
@@ -253,10 +251,9 @@ podman exec -it postgres psql -U postgres -d ecommerce
 
 - [x] Criar stg_books no dbt
 - [x] Criar dim_books com metricas
-- [ ] Criar stg_mercadolivre
-- [ ] Criar dim_mercadolivre
 - [ ] Criar stg_amazon
 - [ ] Criar dim_amazon
+- [ ] Criar stg_mercadolivre (pendente OAuth2)
 
 ### 3. Automacao (medio prazo)
 
