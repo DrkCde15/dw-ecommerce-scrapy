@@ -35,6 +35,11 @@ def load_data(query):
     return pd.read_sql(query, engine)
 
 
+def fmt_brl(value):
+    """Format number as Brazilian currency: R$ 2.584,32"""
+    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 # Sidebar
 st.sidebar.title("📊 Filtros")
 
@@ -109,13 +114,13 @@ with col1:
     st.metric("Total de Produtos", f"{len(df_filtered):,}")
 
 with col2:
-    st.metric("Preco Medio", f"R$ {df_filtered['price'].mean():.2f}")
+    st.metric("Preco Medio", fmt_brl(df_filtered["price"].mean()))
 
 with col3:
-    st.metric("Preco Min", f"R$ {df_filtered['price'].min():.2f}")
+    st.metric("Preco Min", fmt_brl(df_filtered["price"].min()))
 
 with col4:
-    st.metric("Preco Max", f"R$ {df_filtered['price'].max():.2f}")
+    st.metric("Preco Max", fmt_brl(df_filtered["price"].max()))
 
 with col5:
     st.metric("Fontes Ativas", f"{df_filtered['source'].nunique()}")
@@ -211,8 +216,9 @@ with tab2:
         st.plotly_chart(fig_hist, use_container_width=True)
 
     # Estatisticas por fonte
-    st.subheader("Estatisticas por Fonte")
+    st.subheader("Estatisticas por Fonte (R$)")
     stats = df_filtered.groupby("source")["price"].agg(["count", "mean", "median", "min", "max"]).round(2)
+    stats.columns = ["Qtd", "Media", "Mediana", "Min", "Max"]
     stats.columns = ["Qtd", "Media", "Mediana", "Min", "Max"]
     st.dataframe(stats, use_container_width=True)
 
@@ -236,6 +242,7 @@ with tab2:
         # Top 10 produtos mais caros
         st.subheader("Top 10 Produtos Mais Caros")
         top_expensive = df_filtered.nlargest(10, "price")[["name", "price", "source"]]
+        top_expensive["price"] = top_expensive["price"].apply(fmt_brl)
         st.dataframe(top_expensive, use_container_width=True)
 
 # ============================================================
@@ -338,17 +345,29 @@ with tab4:
     if table_option == "Dados Filtrados":
         st.dataframe(df_filtered, use_container_width=True, height=500)
     elif table_option == "Dim Products":
-        st.dataframe(df_dim_products, use_container_width=True, height=500)
+        df_dp = df_dim_products.copy()
+        df_dp["price"] = df_dp["price"].apply(fmt_brl)
+        st.dataframe(df_dp, use_container_width=True, height=500)
     elif table_option == "Dim Books":
-        st.dataframe(df_dim_books, use_container_width=True, height=500)
+        df_db = df_dim_books.copy()
+        df_db["price"] = df_db["price"].apply(fmt_brl)
+        st.dataframe(df_db, use_container_width=True, height=500)
     elif table_option == "Raw Books":
-        st.dataframe(df_books, use_container_width=True, height=500)
+        df_rb = df_books.copy()
+        df_rb["price"] = df_rb["price"].apply(fmt_brl)
+        st.dataframe(df_rb, use_container_width=True, height=500)
     elif table_option == "Raw Amazon":
-        st.dataframe(df_amazon, use_container_width=True, height=500)
+        df_ra = df_amazon.copy()
+        df_ra["price"] = df_ra["price"].apply(fmt_brl)
+        st.dataframe(df_ra, use_container_width=True, height=500)
     elif table_option == "Raw Americanas":
-        st.dataframe(df_americanas, use_container_width=True, height=500)
+        df_iam = df_americanas.copy()
+        df_iam["price"] = df_iam["price"].apply(fmt_brl)
+        st.dataframe(df_iam, use_container_width=True, height=500)
     elif table_option == "Raw KaBuM":
-        st.dataframe(df_kabum, use_container_width=True, height=500)
+        df_kb = df_kabum.copy()
+        df_kb["price"] = df_kb["price"].apply(fmt_brl)
+        st.dataframe(df_kb, use_container_width=True, height=500)
 
     # CDC Columns Info
     st.subheader("Colunas CDC")
@@ -366,7 +385,7 @@ with tab4:
         st.metric("Tabelas Disponiveis", "7")
 
     with col3:
-        st.metric("Ultima Atualizacao", f"{df_filtered['scraped_at'].max()}")
+        st.metric("Ultimo Scraping", str(df_filtered["scraped_at"].max()))
 
 # ============================================================
 # SIDEBAR - Info
