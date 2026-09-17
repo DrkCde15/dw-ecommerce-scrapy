@@ -96,7 +96,7 @@ df_filtered = df_all[
 # HEADER
 # ============================================================
 st.title("📊 Dashboard E-commerce DW")
-st.markdown("Dados raspados por Scrapy e armazenados no PostgreSQL")
+st.markdown("Dados raspados por Scrapy → JSON/Parquet → PostgreSQL (UPSERT + CDC)")
 
 # ============================================================
 # KPIs GERAIS
@@ -350,6 +350,11 @@ with tab4:
     elif table_option == "Raw KaBuM":
         st.dataframe(df_kabum, use_container_width=True, height=500)
 
+    # CDC Columns Info
+    st.subheader("Colunas CDC")
+    cdc_info = load_data("SELECT 'raw.books' as table_name, 'updated_at, deleted_at, _extract_ts' as cdc_columns UNION ALL SELECT 'raw.amazon', 'updated_at, deleted_at, _extract_ts' UNION ALL SELECT 'raw.americanas', 'updated_at, deleted_at, _extract_ts' UNION ALL SELECT 'raw.kabum', 'updated_at, deleted_at, _extract_ts'")
+    st.dataframe(cdc_info, use_container_width=True, height=150)
+    
     # Estatisticas gerais
     st.subheader("Estatisticas Gerais")
     col1, col2, col3 = st.columns(3)
@@ -375,7 +380,20 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("Fonte de dados: PostgreSQL `ecommerce`")
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Status do Pipeline")
-st.sidebar.markdown("- ✅ Scraping: 4 spiders")
-st.sidebar.markdown("- ✅ Transform: Python pipelines")
-st.sidebar.markdown("- ✅ Load: CSV/JSON/Report")
-st.sidebar.markdown("- ✅ Tests: 14/14 passando")
+st.sidebar.markdown("- ✅ Scraping: 4 spiders → JSON/Parquet")
+st.sidebar.markdown("- ✅ StoragePipeline: Load com UPSERT + dedup")
+st.sidebar.markdown("- ✅ Transform: Incremental UPSERT (não replace)")
+st.sidebar.markdown("- ✅ Load: marts → report")
+st.sidebar.markdown("- ✅ Quality: Validation por estágio")
+st.sidebar.markdown("- ✅ CDC: updated_at, deleted_at, _extract_ts")
+st.sidebar.markdown("- ✅ Lineage: lineage.data_lineage")
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📊 Data Lineage")
+
+# Data lineage table
+try:
+    lineage_df = load_data("SELECT source_name, target_table, operation, record_count, execution_time, status FROM lineage.data_lineage ORDER BY execution_time DESC LIMIT 5")
+    if not lineage_df.empty:
+        st.dataframe(lineage_df, use_container_width=True, height=200)
+except:
+    pass
