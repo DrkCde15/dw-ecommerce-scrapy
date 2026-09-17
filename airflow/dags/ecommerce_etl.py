@@ -47,7 +47,7 @@ with DAG(
     # 3. dbt test: valida qualidade dos dados
     dbt_test = BashOperator(
         task_id="dbt_test",
-        bash_command=f"{DBT_CMD} test --profiles-dir /opt/airflow/dbt --project-dir /opt/project/dbt || true;",
+        bash_command=f"{DBT_CMD} test --profiles-dir /opt/airflow/dbt --project-dir /opt/project/dbt;",
     )
 
     # Orquestracao: scraping → transformacao → validacao

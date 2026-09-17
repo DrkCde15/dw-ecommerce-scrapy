@@ -98,10 +98,28 @@ final as (
         source,
         price_tier,
         in_stock,
-        scraped_at
+        scraped_at,
+        row_number() over (partition by product_id, source order by scraped_at desc) as rn
     from all_products
     where product_name is not null
       and price > 0
 )
 
-select * from final
+select
+    id,
+    product_id,
+    product_name,
+    brand,
+    price,
+    original_price,
+    discount_percentage,
+    category,
+    seller,
+    image_url,
+    url,
+    source,
+    price_tier,
+    in_stock,
+    scraped_at
+from final
+where rn = 1
