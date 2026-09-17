@@ -43,14 +43,14 @@ ITEM_PIPELINES = {
     "src.scraping.ecommerce_scraper.pipelines.CleaningPipeline": 100,
     "src.scraping.ecommerce_scraper.pipelines.ValidationPipeline": 200,
     "src.scraping.ecommerce_scraper.pipelines.DuplicatesFilterPipeline": 300,
+    "src.scraping.ecommerce_scraper.pipelines.FileExportPipeline": 400,
 }
 
-# PostgreSQL (ativar conforme necessario)
-POSTGRES_URL = "postgresql://postgres:postgres@localhost:5432/ecommerce"
-POSTGRES_TABLE = "raw.books"
-
-# Exportacao
+# Exportação para arquivos (ETL: Extract escreve em staging local)
 FEED_EXPORT_ENCODING = "utf-8"
+JSON_OUTPUT_DIR = "data/raw"
+PARQUET_OUTPUT_DIR = "data/raw"
+FEED_FORMAT = "json"
 
 # Logging
 LOG_LEVEL = "INFO"

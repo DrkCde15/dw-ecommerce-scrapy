@@ -61,9 +61,8 @@ class BooksSpider(scrapy.Spider):
             "src.scraping.ecommerce_scraper.pipelines.CleaningPipeline": 100,
             "src.scraping.ecommerce_scraper.pipelines.ValidationPipeline": 200,
             "src.scraping.ecommerce_scraper.pipelines.DuplicatesFilterPipeline": 300,
-            "src.scraping.ecommerce_scraper.pipelines.PostgresPipeline": 400,
+            "src.scraping.ecommerce_scraper.pipelines.FileExportPipeline": 400,
         },
-        "POSTGRES_TABLE": "raw.books",
     }
 
     def parse(self, response):

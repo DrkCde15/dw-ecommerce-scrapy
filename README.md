@@ -2,30 +2,52 @@
 
 ## Visao Geral
 
-Projeto de Data Warehouse para analise de dados de e-commerce utilizando **PostgreSQL**, **Python** e **Scrapy** para web scraping com injecao direta no banco.
+Projeto de Data Warehouse para analise de dados de e-commerce utilizando **PostgreSQL**, **Python** e **Scrapy** para web scraping com pipeline ETL robusto.
 
-## Arquitetura
+## Arquitetura ETL Corrigida
 
 ```
-Scrapy (scraping) → PostgreSQL (raw) → Python (staging → marts) → Dashboard
+Spiders (Scrapy) → JSON/Parquet (arquivos) → StoragePipeline (UPSERT + dedup) → PostgreSQL raw.*
+                                                              ↓
+                                                    TransformPipeline (incremental UPSERT)
+                                                              ↓
+                                                    Staging → Marts → Report
+                                                              ↓
+                                                    Quality Tests + Data Lineage
 ```
 
-- **Scraping**: Spiders Scrapy coletam dados e salvam direto no PostgreSQL
-- **Raw**: Dados brutos armazenados no PostgreSQL
-- **Transform**: Scripts Python com pandas transformam dados
-- **Marts**: Tabelas de dimensao prontas para analise
-- **Load**: Exportacao para CSV/JSON e schema report
-- **Dashboard**: Visualizacao interativa com Streamlit
+### Fluxo ETL por Estágio
+
+| Estágio | Entrada → Saída | Validacao |
+|---------|-----------------|-----------|
+| **Extract** | Spiders → JSON/Parquet files | Schema validation, row count |
+| **Load** | Files → `raw.*` (UPSERT + dedup) | CDC columns, referential integrity |
+| **Transform** | `raw.*` → `staging` → `marts` | Null checks, duplicate checks |
+| **Load Report** | `marts` → `report` | Uniqueness, not-null |
+| **Validate** | All stages | Full quality suite |
+| **Monitor** | Pipeline health | Alerts, status tracking |
+
+### Arquitetura Desacoplada (ETL Correto)
+
+- **Extract**: Spiders escrevem em `data/raw/{spider}/*.json|parquet` via `FileExportPipeline` — **NÃO** inserem direto no PostgreSQL
+- **Load**: `StoragePipeline` carrega arquivos → `raw.*` com **UPSERT**, **deduplicação** e **colunas CDC** (`updated_at`, `deleted_at`, `_extract_ts`)
+- **Transform**: `TransformPipeline` usa **incremental loading** com `ON CONFLICT DO UPDATE` — **NÃO** mais `if_exists="replace"`
+- **Validate**: Quality tests executam **em cada estágio** (extract, transform, load) — **NÃO** apenas post-hoc
+- **Orchestrate**: Airflow DAG com `trigger_rule="all_success"` e `retry_exponential_backoff=True`
+- **Lineage**: `DataLineage` rastreia source → table, timestamp, record_count em `lineage.data_lineage`
 
 ## Stack
 
 | Camada | Tecnologia | Descricao |
 |--------|------------|-----------|
-| Scraping | Scrapy 2.19 | Coleta de dados da web |
-| Pipeline | SQLAlchemy | Injecao direta no PostgreSQL |
+| Scraping | Scrapy | Coleta de dados da web |
+| Extract | FileExportPipeline | Spiders → JSON/Parquet |
+| Load | StoragePipeline | Files → PostgreSQL (UPSERT + dedup + CDC) |
+| Transform | Python + pandas | Incremental UPSERT |
+| Quality | DataQualityTests | Validation em cada estágio |
+| Lineage | DataLineage | Rastreamento de origem |
+| Orquestracao | Airflow 2.10 | DAGs com depends_on_downstream |
 | Banco | PostgreSQL 16 | Data Warehouse |
-| Transformacao | Python + pandas | Transformacao de dados |
-| Orquestracao | Airflow 2.10 | DAGs e agendamento |
 | Dashboard | Streamlit | Visualizacao interativa |
 
 ## Pre-requisitos
@@ -41,6 +63,7 @@ podman-compose up -d
 
 # 2. Instalar dependencias
 pip install -r requirements.txt
+pip install -r airflow/requirements.txt
 
 # 3. Acessar Airflow
 # http://localhost:8080 (admin/admin)
@@ -63,7 +86,7 @@ pip install -r requirements.txt
 ### Exemplos de Uso
 
 ```bash
-# Raspar livros e salvar no PostgreSQL
+# Raspar livros (gera JSON/Parquet em data/raw/)
 scrapy crawl books
 
 # Raspar notebooks na Amazon
@@ -77,19 +100,18 @@ scrapy crawl kabum -a query="notebook" -a limit=100
 
 # Raspar com configuracao personalizada
 scrapy crawl configurable -a config=configs/books_toscrape.yml
-
-# Salvar apenas em JSON
-scrapy crawl books -o data/books.json
 ```
 
-### Pipelines Scrapy
+### Pipelines Scrapy (Extract)
 
 | Pipeline | Prioridade | Funcao |
 |----------|------------|--------|
 | `CleaningPipeline` | 100 | Normaliza nomes, precos, categorias |
 | `ValidationPipeline` | 200 | Rejeita campos obrigatorios faltando |
 | `DuplicatesFilterPipeline` | 300 | Remove duplicatas por product_id |
-| `PostgresPipeline` | 400 | Insere dados no PostgreSQL (batch) |
+| `FileExportPipeline` | 400 | Exporta para JSON/Parquet (Extract → arquivo) |
+
+> **Nota**: `PostgresPipeline` foi removido dos spiders. Os spiders agora escrevem em arquivos JSON/Parquet, e o `StoragePipeline` faz o Load separado.
 
 ## Pipelines Python
 
@@ -97,43 +119,60 @@ scrapy crawl books -o data/books.json
 
 ```
 src/pipelines/
-├── storage/storage_pipeline.py    # CSV/JSON → PostgreSQL
-├── transform/transform_pipeline.py # raw → staging → marts
+├── storage/storage_pipeline.py    # Arquivos JSON/Parquet → PostgreSQL (UPSERT + dedup + CDC)
+├── transform/transform_pipeline.py # raw → staging → marts (incremental UPSERT)
 ├── load/load_pipeline.py          # marts → report (CSV/JSON)
-└── tests/quality_tests.py         # Testes de qualidade
+├── tests/quality_tests.py         # Testes de qualidade por estágio
+├── monitoring/
+│   ├── monitor.py                 # Health checks e alertas
+│   └── lineage.py                 # Data lineage tracking
+└── __init__.py
 ```
 
-### Storage Pipeline
+### Storage Pipeline (Load)
 
-Carrega dados brutos do Scrapy para o PostgreSQL:
+Carrega dados de arquivos JSON/Parquet para o PostgreSQL com UPSERT e deduplicação:
 
 ```python
 from src.pipelines.storage.storage_pipeline import StoragePipeline
 
 pipeline = StoragePipeline()
-pipeline.load_csv_to_table("data/books.csv", "books", schema="raw")
-pipeline.load_json_to_table("data/products.json", "products", schema="raw")
+pipeline.load_json_to_table("data/raw/books/books_*.json", "books", "raw", conflict_cols=["product_id", "source"])
+pipeline.load_all_from_directory()  # Carrega todos os arquivos de data/raw/
+pipeline.log_lineage()  # Imprime e persiste data lineage
+pipeline.close()
 ```
+
+**Características:**
+- UPSERT com `ON CONFLICT DO UPDATE`
+- Deduplicação mantendo o registro mais recente
+- Colunas CDC: `updated_at`, `deleted_at`, `_extract_ts`
+- Data lineage tracking no banco (`lineage.data_lineage`)
 
 ### Transform Pipeline
 
-Transforma dados brutos em tabelas de analise:
+Transforma dados brutos em tabelas de análise com incremental loading:
 
 ```python
 from src.pipelines.transform.transform_pipeline import TransformPipeline
 
 pipeline = TransformPipeline()
 results = pipeline.run_all()
-# Retorna: {'staging': {...}, 'marts': {...}, 'elapsed_seconds': 1.65}
+# Retorna: {'staging': {...}, 'marts': {...}, 'elapsed_seconds': 1.65, 'validation_errors': []}
 ```
 
-**Funcoes de transformacao:**
-- `transform_stg_books()` - Livros
+**Funções de transformação:**
+- `transform_stg_books()` - Livros (incremental UPSERT)
 - `transform_stg_amazon()` - Amazon
 - `transform_stg_americanas()` - Americanas
 - `transform_stg_kabum()` - KaBuM
-- `transform_dim_books()` - Dimensao de livros
-- `transform_dim_products()` - Dimensao unificada
+- `transform_dim_books()` - Dimensão de livros (incremental UPSERT)
+- `transform_dim_products()` - Dimensão unificada (incremental UPSERT)
+
+**Características:**
+- Incremental loading com `ON CONFLICT DO UPDATE` (não usa mais `if_exists="replace"`)
+- Validação em pipeline: row count, null checks
+- Colunas CDC atualizadas automaticamente
 
 ### Load Pipeline
 
@@ -148,63 +187,70 @@ pipeline.load_all_to_csv("output") # marts → CSV
 pipeline.load_all_to_json("output") # marts → JSON
 ```
 
-### Quality Tests
+### Quality Tests (Validação em Pipeline)
 
-Valida qualidade dos dados:
+Valida qualidade dos dados em **cada estágio** do ETL:
 
 ```python
 from src.pipelines.tests.quality_tests import DataQualityTests
 
 tests = DataQualityTests()
 success = tests.run_all_tests()
-# 14/14 testes passando
+# Testes por estágio: extract, transform, load, cdc, lineage
 ```
 
-**Testes disponiveis:**
-- `test_unique()` - Unicidade de colunas
-- `test_not_null()` - Nulidade
-- `test_positive_value()` - Valores positivos
-- `test_value_in_set()` - Valores em conjunto
-- `test_row_count()` - Contagem de linhas
-- `test_foreign_key()` - Chaves estrangeiras
+**Testes por estágio:**
+- **Extract**: `validate_extract_schema()`, `validate_extract_not_empty()`, `validate_cdc_columns()`
+- **Transform**: `validate_transform_nulls()`, `validate_transform_duplicates()`, `validate_transform_row_count()`
+- **Load**: `validate_load_referential_integrity()`, `validate_load_unique()`, `validate_load_not_null()`
+- **CDC**: `validate_cdc_columns()`
+- **Lineage**: `validate_lineage_exists()`
 
-## Notebooks com Análises Automatizadas
+### Data Lineage
 
-Três notebooks interagem diretamente com o PostgreSQL para análise exploratória:
+Rastreia a origem dos dados no pipeline:
 
-| Notebook | Conteúdo |
-|----------|----------|
-| `01_analise_vendas.ipynb` | Análise de preços, categorias, dim_books, dim_products, relatório automatizado |
-| `02_qualidade_dados.ipynb` | Testes automatizados (NOT NULL, UNIQUE, POSITIVE, ROW COUNT) |
-| `03_comparativo_fontes.ipynb` | Comparativo entre Amazon, Americanas e KaBuM |
+```python
+from src.pipelines.monitoring.lineage import get_lineage_tracker
 
-### Executando os notebooks
-
-```bash
-pip install matplotlib seaborn
-jupyter notebook
+tracker = get_lineage_tracker()
+tracker.record_lineage(source_name="data/raw/books", source_type="file", ...)
+tracker.print_lineage_report()
+tracker.get_lineage_summary()
+tracker.get_daily_stats("2024-01-15")
 ```
 
 ## Airflow
 
-### Acessos
-
-| Servico | URL | Credenciais |
-|---------|-----|-------------|
-| Airflow Webserver | http://localhost:8080 | admin / admin |
-| PostgreSQL | localhost:5432 | postgres / postgres |
-
 ### DAG `ecommerce_etl`
 
 ```
-run_all_spiders >> transform >> load >> quality_tests
-   (BashOperator)   (PythonOperator)  (PythonOperator)  (PythonOperator)
+run_spiders >> extract >> validate_extract >> transform >> validate_transform >> load_report >> validate_load >> quality_tests >> monitoring
+  (BashOperator)  (PythonOperator)  (PythonOperator)  (PythonOperator)  (PythonOperator)  (PythonOperator)  (PythonOperator)  (PythonOperator)  (PythonOperator)
 ```
 
-- **Agendamento**: Diario as 6h
-- **Spiders**: books (query=all), amazon/americanas/kabum (query=notebook, limit=50)
-- **run_spiders.sh**: Executa spiders em loop, rastreia falhas, retorna exit 1 se algum spider falhar
-- **Pipelines**: CleaningPipeline (100), ValidationPipeline (200), DuplicatesFilterPipeline (300), PostgresPipeline (400)
+**Orquestração:**
+- **`trigger_rule="all_success"`** em cada stage (equivalent a `depends_on_downstream` — se um stage falhar, os subsequentes não executam)
+- **`retry_exponential_backoff=True`** — retries com backoff exponencial (30s, 60s, 120s)
+- **`max_active_runs=1`** — evita execuções concorrentes
+
+**Stages:**
+1. `run_spiders` — Executa spiders via `run_spiders.sh` com retry
+2. `extract` — StoragePipeline carrega arquivos → `raw.*`
+3. `validate_extract` — Schema validation, CDC columns
+4. `transform` — Raw → staging → marts (incremental UPSERT)
+5. `validate_transform` — Null checks, duplicate checks
+6. `load_report` — Marts → report schema
+7. `validate_load` — Referential integrity, uniqueness
+8. `quality_tests` — Full quality suite
+9. `monitoring` — Pipeline health check
+
+### run_spiders.sh
+
+- Retry com **backoff exponencial** (5s, 10s, 20s)
+- Até 3 tentativas por spider
+- Falha parcial: continua outros spiders
+- Exit 1 se algum spider falhar após retries
 
 ### Comandos uteis
 
@@ -243,11 +289,6 @@ podman exec ecommerce_airflow_webserver airflow dags trigger ecommerce_etl
 | Analise de Precos | Boxplot, histograma, violino, top 10 mais caros |
 | Analise Avancada | Preco medio, dispersao, categorias, heatmap |
 | Dados | Tabelas filtraveis (raw, dim products, dim books) |
-
-### Filtros
-
-- **Fontes**: Selecionar quais fontes exibir (Books, Amazon, Americanas, KaBuM)
-- **Faixa de Preco**: Filtrar por intervalo de preco
 
 ### Rodar localmente
 
@@ -327,41 +368,50 @@ podman exec -it ecommerce_postgres psql -U postgres -d ecommerce
 │   │           ├── configurable_spider.py
 │   │           └── products_spider.py
 │   └── pipelines/
-│       ├── storage/storage_pipeline.py
-│       ├── transform/transform_pipeline.py
-│       ├── load/load_pipeline.py
-│       └── tests/
-│           ├── __init__.py
-│           └── quality_tests.py
+│       ├── storage/storage_pipeline.py    # Arquivos → PostgreSQL (UPSERT + dedup + CDC)
+│       ├── transform/transform_pipeline.py # Incremental UPSERT
+│       ├── load/load_pipeline.py          # marts → report
+│       ├── monitoring/
+│       │   ├── monitor.py                 # Health checks
+│       │   └── lineage.py                 # Data lineage tracking
+│       ├── tests/
+│       │   ├── __init__.py
+│       │   └── quality_tests.py           # Validation por estágio
+│       └── __init__.py
 ├── sql/
-│   └── init/
-│       └── init_schema.sql
+│   ├── init/
+│   │   └── init_schema.sql              # CDC columns + lineage tables
+│   ├── staging/
+│   ├── intermediate/
+│   └── marts/
 ├── data/
-└── tests/
-    └── scraping/
-        ├── test_spiders.py
-        └── test_pipelines.py
+├── tests/
+│   └── scraping/
+│       ├── test_spiders.py
+│       └── test_pipelines.py
 ```
 
 ## Modelo de Dados
 
-### Fluxo de Dados
+### Fluxo de Dados (ETL Correto)
 
 ```
-books.toscrape.com ──→ raw.books     ──→ stg_books     ──→ dim_books
-amazon.com.br      ──→ raw.amazon    ──→ stg_amazon    ──┐
-americanas.com.br  ──→ raw.americanas──→ stg_americanas──┤→ dim_products
-kabum.com.br       ──→ raw.kabum     ──→ stg_kabum     ──┘
-                                                            │
-                                                            ▼
-                                                     report (CSV/JSON)
+books.toscrape.com ──→ data/raw/books/*.json|parquet ──→ StoragePipeline ──→ raw.books
+amazon.com.br      ──→ data/raw/amazon/*.json|parquet ──→ StoragePipeline ──→ raw.amazon
+americanas.com.br  ──→ data/raw/americanas/*.json|parquet ──→ StoragePipeline ──→ raw.americanas
+kabum.com.br       ──→ data/raw/kabum/*.json|parquet ──→ StoragePipeline ──→ raw.kabum
+
+raw.* ──→ TransformPipeline (incremental UPSERT) ──→ staging.* ──→ marts.* ──→ report.*
+                                                                    ↓
+                                                          lineage.data_lineage
+                                                          lineage.change_tracking
 ```
 
 ### Tabelas
 
 | Schema | Tabela | Registros | Descricao |
 |--------|--------|-----------|-----------|
-| `raw` | `books` | 12.000 | Livros brutos |
+| `raw` | `books` | 12.000 | Livros brutos (com CDC columns) |
 | `raw` | `amazon` | 535 | Produtos Amazon brutos |
 | `raw` | `americanas` | 248 | Produtos Americanas brutos |
 | `raw` | `kabum` | 250 | Produtos KaBuM brutos |
@@ -371,6 +421,16 @@ kabum.com.br       ──→ raw.kabum     ──→ stg_kabum     ──┘
 | `staging` | `stg_kabum` | 250 | KaBuM normalizado |
 | `marts` | `dim_books` | 1.000 | Dimensao de livros |
 | `marts` | `dim_products` | 347 | Dimensao unificada |
+| `lineage` | `data_lineage` | - | Rastreamento de origem |
+| `lineage` | `change_tracking` | - | CDC change tracking |
+
+### Colunas CDC em todas as tabelas raw
+
+Todas as tabelas no schema `raw` possuem:
+- `updated_at` — Timestamp da última atualização
+- `deleted_at` — Timestamp de exclusão lógica (NULL se ativo)
+- `_extract_ts` — Timestamp da extração original
+- `UNIQUE(product_id, source)` — Constraint para UPSERT
 
 ---
 
@@ -401,12 +461,19 @@ kabum.com.br       ──→ raw.kabum     ──→ stg_kabum     ──┘
 - [x] DAG no Airflow para rodar scraping diario
 - [x] Schedule de transform apos scraping
 - [x] Load para schema report
+- [x] **Extract/Load desacoplado** (FileExportPipeline + StoragePipeline)
+- [x] **Incremental loading** (UPSERT ao inves de replace)
+- [x] **Quality checks em pipeline** (validate por estágio)
+- [x] **Data lineage tracking** (lineage.data_lineage)
+- [x] **CDC columns** (updated_at, deleted_at, _extract_ts)
+- [x] **retry_exponential_backoff** no Airflow DAG
 - [ ] Alertas quando scraping falhar
 - [ ] Notificacao via Telegram/Slack
 
 ### 4. Data Quality (medio prazo)
 
 - [x] Testes de qualidade em Python (14/14)
+- [x] **Validation em cada estágio** (extract, transform, load)
 - [ ] Testes de consistencia entre scraping e banco
 - [ ] Monitoramento de volume de dados
 - [ ] Alertas de anomalias (precos, volume, etc)

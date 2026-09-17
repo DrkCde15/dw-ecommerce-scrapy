@@ -272,7 +272,7 @@ class TestPandasExportPipeline:
 
 
 class TestPostgresPipeline:
-    """Testes para o pipeline de exportacao PostgreSQL."""
+    """Testes para o pipeline de UPSERT PostgreSQL."""
 
     def test_init_default_values(self):
         pipeline = PostgresPipeline(
@@ -281,7 +281,6 @@ class TestPostgresPipeline:
         )
         assert pipeline.postgres_url == "postgresql://user:pass@localhost:5432/db"
         assert pipeline.table_name == "raw.books"
-        assert pipeline.items == []
 
     def test_init_custom_table(self):
         pipeline = PostgresPipeline(
@@ -290,29 +289,12 @@ class TestPostgresPipeline:
         )
         assert pipeline.table_name == "staging.products"
 
-    def test_process_item_accumulates(self, spider):
+    def test_upsert_records_empty(self):
         pipeline = PostgresPipeline(
             postgres_url="postgresql://user:pass@localhost:5432/db",
         )
-        pipeline.engine = None  # Simula falha de conexao
-
-        item = {"product_id": "1", "name": "Teste", "price": 99.90}
-        result = pipeline.process_item(item, spider)
-
-        assert result is not None
-        assert len(pipeline.items) == 1
-
-    def test_flush_without_engine(self, spider):
-        pipeline = PostgresPipeline(
-            postgres_url="postgresql://user:pass@localhost:5432/db",
-        )
-        pipeline.engine = None
-
-        pipeline.items = [{"product_id": "1", "name": "Teste"}]
-        pipeline._flush()
-
-        # Nao deve alterar os itens quando nao ha engine
-        assert len(pipeline.items) == 1
+        result = pipeline.upsert_records([])
+        assert result == 0
 
     def test_from_crawler_settings(self):
         class MockSettings(dict):
