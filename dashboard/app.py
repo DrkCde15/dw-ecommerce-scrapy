@@ -74,11 +74,15 @@ sources = st.sidebar.multiselect(
     default=df_all["source"].unique(),
 )
 
+# Calcular limites de preco com tratamento de NaN
+price_min = float(df_all["price"].fillna(0).min() or 0)
+price_max = float(df_all["price"].fillna(0).max() or 1000)
+
 price_range = st.sidebar.slider(
     "Faixa de Preco (R$)",
-    min_value=float(df_all["price"].min() or 0),
-    max_value=float(df_all["price"].max() or 1000),
-    value=(0, float(df_all["price"].max() or 1000)),
+    min_value=price_min,
+    max_value=price_max,
+    value=(price_min, price_max),
 )
 
 # Aplicar filtros
