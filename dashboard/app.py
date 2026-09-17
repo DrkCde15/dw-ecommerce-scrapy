@@ -136,7 +136,7 @@ with tab1:
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        volume_data = df_all.groupby("source").size().reset_index(name="produtos")
+        volume_data = df_filtered.groupby("source").size().reset_index(name="produtos")
         fig_volume = px.bar(
             volume_data,
             x="source",
@@ -150,8 +150,8 @@ with tab1:
 
     with col2:
         st.subheader("Por Fonte")
-        for source in df_all["source"].unique():
-            count = len(df_all[df_all["source"] == source])
+        for source in df_filtered["source"].unique():
+            count = len(df_filtered[df_filtered["source"] == source])
             st.metric(source, f"{count:,}")
 
     # Grafico de pizza
@@ -168,8 +168,8 @@ with tab1:
 
     with col2:
         # Timeline de scraping
-        df_all["scraped_date"] = pd.to_datetime(df_all["scraped_at"]).dt.date
-        timeline = df_all.groupby(["scraped_date", "source"]).size().reset_index(name="count")
+        df_filtered["scraped_date"] = pd.to_datetime(df_filtered["scraped_at"]).dt.date
+        timeline = df_filtered.groupby(["scraped_date", "source"]).size().reset_index(name="count")
         fig_timeline = px.line(
             timeline,
             x="scraped_date",
@@ -355,22 +355,22 @@ with tab4:
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("Total de Registros", f"{len(df_all):,}")
+        st.metric("Total de Registros", f"{len(df_filtered):,}")
 
     with col2:
         st.metric("Tabelas Disponiveis", "7")
 
     with col3:
-        st.metric("Ultima Atualizacao", f"{df_all['scraped_at'].max()}")
+        st.metric("Ultima Atualizacao", f"{df_filtered['scraped_at'].max()}")
 
 # ============================================================
 # SIDEBAR - Info
 # ============================================================
 st.sidebar.divider()
 st.sidebar.markdown("### ℹ️ Info")
-st.sidebar.markdown(f"- **Total de registros**: {len(df_all):,}")
-st.sidebar.markdown(f"- **Fontes ativas**: {df_all['source'].nunique()}")
-st.sidebar.markdown(f"- **Ultima atualizacao**: {df_all['scraped_at'].max()}")
+st.sidebar.markdown(f"- **Total de registros**: {len(df_filtered):,}")
+st.sidebar.markdown(f"- **Fontes ativas**: {df_filtered['source'].nunique()}")
+st.sidebar.markdown(f"- **Ultima atualizacao**: {df_filtered['scraped_at'].max()}")
 st.sidebar.markdown("---")
 st.sidebar.markdown("Fonte de dados: PostgreSQL `ecommerce`")
 st.sidebar.markdown("---")
