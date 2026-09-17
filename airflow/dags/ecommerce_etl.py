@@ -17,8 +17,8 @@ from airflow.operators.python import PythonOperator
 # Adicionar src ao path
 sys.path.insert(0, "/opt/project/src")
 
-from pipelines.transform import TransformPipeline
-from pipelines.tests import DataQualityTests
+from pipelines.transform.transform_pipeline import TransformPipeline
+from pipelines.tests.quality_tests import DataQualityTests
 
 
 default_args = {

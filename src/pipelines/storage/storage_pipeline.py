@@ -4,7 +4,6 @@ Responsavel por carregar dados brutos do Scrapy para o banco de dados.
 """
 
 import os
-import glob
 import pandas as pd
 from sqlalchemy import create_engine, text
 from pathlib import Path
