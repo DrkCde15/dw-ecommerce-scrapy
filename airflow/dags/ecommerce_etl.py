@@ -18,6 +18,7 @@ from airflow.operators.python import PythonOperator
 sys.path.insert(0, "/opt/project/src")
 
 from pipelines.transform.transform_pipeline import TransformPipeline
+from pipelines.load.load_pipeline import LoadPipeline
 from pipelines.tests.quality_tests import DataQualityTests
 
 
@@ -38,6 +39,15 @@ def run_transform():
     )
     results = pipeline.run_all()
     print(f"Transformacoes concluidas: {results}")
+
+
+def run_load():
+    """Carrega dados transformados para schema report."""
+    pipeline = LoadPipeline(
+        postgres_url="postgresql://postgres:postgres@postgres:5432/ecommerce"
+    )
+    results = pipeline.load_all_to_report()
+    print(f"Load concluido: {results}")
 
 
 def run_quality_tests():
@@ -72,11 +82,17 @@ with DAG(
         python_callable=run_transform,
     )
 
-    # 3. Quality Tests: valida qualidade dos dados
+    # 3. Load: marts → report
+    load = PythonOperator(
+        task_id="load",
+        python_callable=run_load,
+    )
+
+    # 4. Quality Tests: valida qualidade dos dados
     quality_tests = PythonOperator(
         task_id="quality_tests",
         python_callable=run_quality_tests,
     )
 
-    # Orquestracao: scraping → transformacao → validacao
-    run_all_spiders >> transform >> quality_tests
+    # Orquestracao: scraping → transformacao → load → validacao
+    run_all_spiders >> transform >> load >> quality_tests
