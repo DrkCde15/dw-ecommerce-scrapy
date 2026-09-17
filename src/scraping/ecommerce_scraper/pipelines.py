@@ -269,6 +269,7 @@ class PostgresPipeline:
             self.items.clear()
         except Exception as e:
             logger.error(f"Erro ao inserir no PostgreSQL: {e}")
+            raise
 
     def close_spider(self, spider):
         """Insere itens restantes ao fechar."""

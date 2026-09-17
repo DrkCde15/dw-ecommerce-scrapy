@@ -3,6 +3,8 @@ pandas>=2.2.0
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.9
 jupyter>=1.0.0
+matplotlib>=3.8.0
+seaborn>=0.13.0
 
 # Web Scraping
 scrapy>=2.11.0

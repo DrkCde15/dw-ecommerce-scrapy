@@ -168,6 +168,23 @@ success = tests.run_all_tests()
 - `test_row_count()` - Contagem de linhas
 - `test_foreign_key()` - Chaves estrangeiras
 
+## Notebooks com Análises Automatizadas
+
+Três notebooks interagem diretamente com o PostgreSQL para análise exploratória:
+
+| Notebook | Conteúdo |
+|----------|----------|
+| `01_analise_vendas.ipynb` | Análise de preços, categorias, dim_books, dim_products, relatório automatizado |
+| `02_qualidade_dados.ipynb` | Testes automatizados (NOT NULL, UNIQUE, POSITIVE, ROW COUNT) |
+| `03_comparativo_fontes.ipynb` | Comparativo entre Amazon, Americanas e KaBuM |
+
+### Executando os notebooks
+
+```bash
+pip install matplotlib seaborn
+jupyter notebook
+```
+
 ## Airflow
 
 ### Acessos
@@ -186,6 +203,8 @@ run_all_spiders >> transform >> load >> quality_tests
 
 - **Agendamento**: Diario as 6h
 - **Spiders**: books (query=all), amazon/americanas/kabum (query=notebook, limit=50)
+- **run_spiders.sh**: Executa spiders em loop, rastreia falhas, retorna exit 1 se algum spider falhar
+- **Pipelines**: CleaningPipeline (100), ValidationPipeline (200), DuplicatesFilterPipeline (300), PostgresPipeline (400)
 
 ### Comandos uteis
 
@@ -287,6 +306,10 @@ podman exec -it ecommerce_postgres psql -U postgres -d ecommerce
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── app.py
+├── notebooks/
+│   ├── 01_analise_vendas.ipynb
+│   ├── 02_qualidade_dados.ipynb
+│   └── 03_comparativo_fontes.ipynb
 ├── configs/
 │   ├── books_toscrape.yml
 │   └── mercadolivre_celulares.json
@@ -307,7 +330,9 @@ podman exec -it ecommerce_postgres psql -U postgres -d ecommerce
 │       ├── storage/storage_pipeline.py
 │       ├── transform/transform_pipeline.py
 │       ├── load/load_pipeline.py
-│       └── tests/quality_tests.py
+│       └── tests/
+│           ├── __init__.py
+│           └── quality_tests.py
 ├── sql/
 │   └── init/
 │       └── init_schema.sql
@@ -390,13 +415,14 @@ kabum.com.br       ──→ raw.kabum     ──→ stg_kabum     ──┘
 
 - [x] Dashboard com Streamlit conectado ao DW
 - [x] KPIs, graficos, tabelas filtraveis
-- [ ] Notebooks com analises automatizadas
+- [x] Notebooks com analises automatizadas
 - [ ] Relatorios periodicos via email
 
 ### 6. Infraestrutura (longo prazo)
 
 - [ ] CI/CD no GitHub Actions (testes automaticos)
 - [x] Deploy do Airflow no Docker
+- [x] Volume dbt removido (diretorio nao existe mais)
 - [ ] Backup automatico do PostgreSQL
 - [ ] Monitoramento com Prometheus + Grafana
 

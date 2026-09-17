@@ -1,10 +1,10 @@
 -- Schema raw para dados brutos
 CREATE SCHEMA IF NOT EXISTS raw;
 
--- Schema para staging (dbt)
+-- Schema para staging (transformação Python)
 CREATE SCHEMA IF NOT EXISTS staging;
 
--- Schema para marts (dbt)
+-- Schema para marts (transformação Python)
 CREATE SCHEMA IF NOT EXISTS marts;
 
 -- Tabela de clientes raw

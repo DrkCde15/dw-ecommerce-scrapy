@@ -25,6 +25,7 @@ services:
       context: .
       dockerfile: airflow/Dockerfile
     container_name: ecommerce_airflow_init
+    restart: "no"
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres:5432/airflow
       AIRFLOW__CORE__FERNET_KEY: "81HqDtbqAywKSOumSha3BhWNOdQ26slT6K0YaZeZyPs="
@@ -64,8 +65,8 @@ services:
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
-      - ./airflow/dbt:/opt/airflow/dbt:ro
       - .:/opt/project
+    
     user: root
     command: airflow webserver
     depends_on:
@@ -95,8 +96,8 @@ services:
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
-      - ./airflow/dbt:/opt/airflow/dbt:ro
       - .:/opt/project
+    
     user: root
     command: airflow scheduler
     depends_on:
