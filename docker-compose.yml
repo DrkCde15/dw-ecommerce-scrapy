@@ -64,7 +64,8 @@ services:
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
-      - .:/opt/project:ro
+      - ./airflow/dbt:/opt/airflow/dbt:ro
+      - .:/opt/project
     user: root
     command: airflow webserver
     depends_on:
@@ -94,7 +95,8 @@ services:
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
-      - .:/opt/project:ro
+      - ./airflow/dbt:/opt/airflow/dbt:ro
+      - .:/opt/project
     user: root
     command: airflow scheduler
     depends_on:
