@@ -2,37 +2,36 @@
 
 ## Visao Geral
 
-Projeto de Data Warehouse para analise de dados de e-commerce utilizando **PostgreSQL**, **SQL**, **dbt** e **Scrapy** para web scraping com injecao direta no banco.
+Projeto de Data Warehouse para analise de dados de e-commerce utilizando **PostgreSQL**, **Python** e **Scrapy** para web scraping com injecao direta no banco.
 
 ## Arquitetura
 
 ```
-Scrapy (scraping) → PostgreSQL (raw) → dbt (staging → intermediate → marts)
+Scrapy (scraping) → PostgreSQL (raw) → Python (staging → marts) → Dashboard
 ```
 
 - **Scraping**: Spiders Scrapy coletam dados e salvam direto no PostgreSQL
 - **Raw**: Dados brutos armazenados no PostgreSQL
-- **Staging**: Modelos de estagiação que limpam e normalizam os dados
-- **Intermediate**: Modelos intermediários com joins e transformações complexas
-- **Marts**: Tabelas de dimensão e fato prontas para analise
+- **Transform**: Scripts Python com pandas transformam dados
+- **Marts**: Tabelas de dimensao prontas para analise
+- **Load**: Exportacao para CSV/JSON e schema report
+- **Dashboard**: Visualizacao interativa com Streamlit
 
 ## Stack
 
 | Camada | Tecnologia | Descricao |
 |--------|------------|-----------|
 | Scraping | Scrapy 2.19 | Coleta de dados da web |
-| Browser | Playwright (opcional) | Sites com JS anti-bot |
 | Pipeline | SQLAlchemy | Injecao direta no PostgreSQL |
 | Banco | PostgreSQL 16 | Data Warehouse |
-| Transformacao | dbt 1.9 | Modelagem de dados |
+| Transformacao | Python + pandas | Transformacao de dados |
 | Orquestracao | Airflow 2.10 | DAGs e agendamento |
-| Analise | Jupyter + pandas | Exploracao de dados |
+| Dashboard | Streamlit | Visualizacao interativa |
 
 ## Pre-requisitos
 
 - Python 3.14+
 - Podman + podman-compose
-- dbt-postgres
 
 ## Instalacao
 
@@ -43,30 +42,8 @@ podman-compose up -d
 # 2. Instalar dependencias
 pip install -r requirements.txt
 
-# 3. Configurar dbt
-cd dbt
-dbt deps
-
-# 4. Acessar Airflow
+# 3. Acessar Airflow
 # http://localhost:8080 (admin/admin)
-```
-
-## Configuracao dbt
-
-Configure seu `profiles.yml`:
-
-```yaml
-ecommerce_dw:
-  target: dev
-  outputs:
-    dev:
-      type: postgres
-      host: localhost
-      port: 5432
-      dbname: ecommerce
-      user: postgres
-      password: postgres
-      schema: public
 ```
 
 ## Web Scraping
@@ -105,36 +82,7 @@ scrapy crawl configurable -a config=configs/books_toscrape.yml
 scrapy crawl books -o data/books.json
 ```
 
-### Configuracoes
-
-Arquivos de configuracao na pasta `configs/`:
-
-| Arquivo | Descricao |
-|---------|-----------|
-| `books_toscrape.yml` | Config para books.toscrape.com |
-| `mercadolivre_celulares.json` | Config para Mercado Livre |
-
-Exemplo de configuracao YAML:
-
-```yaml
-name: "Meu Spider"
-allowed_domains: ["example.com"]
-start_url: "https://example.com/produtos"
-selectors:
-  item: "div.product"
-  fields:
-    name:
-      css: "h2.title"
-    price:
-      css: "span.price"
-      processors:
-        - clean_price
-pagination:
-  next: "a.next::attr(href)"
-  max_pages: 5
-```
-
-### Pipelines
+### Pipelines Scrapy
 
 | Pipeline | Prioridade | Funcao |
 |----------|------------|--------|
@@ -143,42 +91,82 @@ pagination:
 | `DuplicatesFilterPipeline` | 300 | Remove duplicatas por product_id |
 | `PostgresPipeline` | 400 | Insere dados no PostgreSQL (batch) |
 
-### Testes
+## Pipelines Python
 
-```bash
-# Rodar todos os testes
-pytest tests/scraping/ -v
+### Estrutura
 
-# Com coverage
-pytest tests/scraping/ --cov=src/scraping
+```
+src/pipelines/
+├── storage/storage_pipeline.py    # CSV/JSON → PostgreSQL
+├── transform/transform_pipeline.py # raw → staging → marts
+├── load/load_pipeline.py          # marts → report (CSV/JSON)
+└── tests/quality_tests.py         # Testes de qualidade
 ```
 
-## dbt
+### Storage Pipeline
 
-```bash
-# Rodar todos os modelos
-dbt run
+Carrega dados brutos do Scrapy para o PostgreSQL:
 
-# Rodar apenas stg_books e dim_books
-dbt run --select stg_books dim_books
+```python
+from src.pipelines.storage.storage_pipeline import StoragePipeline
 
-# Rodar testes
-dbt test
-
-# Gerar documentacao
-dbt docs generate && dbt docs serve
+pipeline = StoragePipeline()
+pipeline.load_csv_to_table("data/books.csv", "books", schema="raw")
+pipeline.load_json_to_table("data/products.json", "products", schema="raw")
 ```
 
-### Modelos de Dados
+### Transform Pipeline
 
-| Modelo | Camada | Fonte | Descricao |
-|--------|--------|-------|-----------|
-| `stg_books` | Staging | books.toscrape.com | Livros raspados via HTML |
-| `stg_amazon` | Staging | amazon.com.br | Produtos raspados via HTML |
-| `stg_americanas` | Staging | americanas.com.br | Produtos via VTEX API |
-| `stg_kabum` | Staging | kabum.com.br | Produtos via API interna |
-| `dim_books` | Marts | books | Metricas por livro |
-| `dim_products` | Marts | todas | Tabela unificada de produtos |
+Transforma dados brutos em tabelas de analise:
+
+```python
+from src.pipelines.transform.transform_pipeline import TransformPipeline
+
+pipeline = TransformPipeline()
+results = pipeline.run_all()
+# Retorna: {'staging': {...}, 'marts': {...}, 'elapsed_seconds': 1.65}
+```
+
+**Funcoes de transformacao:**
+- `transform_stg_books()` - Livros
+- `transform_stg_amazon()` - Amazon
+- `transform_stg_americanas()` - Americanas
+- `transform_stg_kabum()` - KaBuM
+- `transform_dim_books()` - Dimensao de livros
+- `transform_dim_products()` - Dimensao unificada
+
+### Load Pipeline
+
+Exporta dados transformados:
+
+```python
+from src.pipelines.load.load_pipeline import LoadPipeline
+
+pipeline = LoadPipeline()
+pipeline.load_all_to_report()      # marts → report
+pipeline.load_all_to_csv("output") # marts → CSV
+pipeline.load_all_to_json("output") # marts → JSON
+```
+
+### Quality Tests
+
+Valida qualidade dos dados:
+
+```python
+from src.pipelines.tests.quality_tests import DataQualityTests
+
+tests = DataQualityTests()
+success = tests.run_all_tests()
+# 14/14 testes passando
+```
+
+**Testes disponiveis:**
+- `test_unique()` - Unicidade de colunas
+- `test_not_null()` - Nulidade
+- `test_positive_value()` - Valores positivos
+- `test_value_in_set()` - Valores em conjunto
+- `test_row_count()` - Contagem de linhas
+- `test_foreign_key()` - Chaves estrangeiras
 
 ## Airflow
 
@@ -191,7 +179,10 @@ dbt docs generate && dbt docs serve
 
 ### DAG `ecommerce_etl`
 
-Executa todos os 4 spiders (books, amazon, americanas, kabum) e salva no PostgreSQL via `PostgresPipeline`.
+```
+run_all_spiders >> transform >> load >> quality_tests
+   (BashOperator)   (PythonOperator)  (PythonOperator)  (PythonOperator)
+```
 
 - **Agendamento**: Diario as 6h
 - **Spiders**: books (query=all), amazon/americanas/kabum (query=notebook, limit=50)
@@ -214,9 +205,6 @@ podman exec ecommerce_airflow_webserver airflow dags unpause ecommerce_etl
 
 # Rodar DAG manualmente
 podman exec ecommerce_airflow_webserver airflow dags trigger ecommerce_etl
-
-# Ver status da execucao
-podman exec ecommerce_airflow_webserver airflow tasks states-for-dag-run ecommerce_etl <run_id>
 ```
 
 ## Dashboard
@@ -231,11 +219,11 @@ podman exec ecommerce_airflow_webserver airflow tasks states-for-dag-run ecommer
 
 | Secao | Descricao |
 |-------|-----------|
-| KPIs Gerais | Total de produtos, preco medio, min/max |
-| Volume de Scraping | Produtos por fonte (grafico de barras) |
-| Analise de Precos | Distribuicao por fonte (boxplot + histograma) |
-| Comparacao entre Fontes | Preco medio por fonte, scatter plot |
-| Lista de Produtos | Tabela com todos os produtos filtraveis |
+| KPIs Gerais | Total de produtos, preco medio, min/max, fontes ativas |
+| Volume de Scraping | Produtos por fonte, timeline, grafico de pizza |
+| Analise de Precos | Boxplot, histograma, violino, top 10 mais caros |
+| Analise Avancada | Preco medio, dispersao, categorias, heatmap |
+| Dados | Tabelas filtraveis (raw, dim products, dim books) |
 
 ### Filtros
 
@@ -265,13 +253,6 @@ podman-compose up -d
 podman-compose up -d dashboard
 ```
 
-# Parar tudo
-podman-compose down
-
-# Parar e limpar volumes
-podman-compose down -v
-```
-
 ## Podman
 
 ```bash
@@ -285,7 +266,7 @@ podman-compose down
 podman-compose logs postgres
 
 # Acessar psql
-podman exec -it postgres psql -U postgres -d ecommerce
+podman exec -it ecommerce_postgres psql -U postgres -d ecommerce
 ```
 
 ## Estrutura do Projeto
@@ -309,34 +290,27 @@ podman exec -it postgres psql -U postgres -d ecommerce
 ├── configs/
 │   ├── books_toscrape.yml
 │   └── mercadolivre_celulares.json
-├── src/scraping/
-│   └── ecommerce_scraper/
-│       ├── settings.py
-│       ├── pipelines.py
-│       └── spiders/
-│           ├── books_spider.py
-│           ├── amazon_spider.py
-│           ├── americanas_spider.py
-│           ├── kabum_spider.py
-│           ├── mercadolivre_spider.py
-│           ├── configurable_spider.py
-│           └── products_spider.py
+├── src/
+│   ├── scraping/
+│   │   └── ecommerce_scraper/
+│   │       ├── settings.py
+│   │       ├── pipelines.py
+│   │       └── spiders/
+│   │           ├── books_spider.py
+│   │           ├── amazon_spider.py
+│   │           ├── americanas_spider.py
+│   │           ├── kabum_spider.py
+│   │           ├── mercadolivre_spider.py
+│   │           ├── configurable_spider.py
+│   │           └── products_spider.py
+│   └── pipelines/
+│       ├── storage/storage_pipeline.py
+│       ├── transform/transform_pipeline.py
+│       ├── load/load_pipeline.py
+│       └── tests/quality_tests.py
 ├── sql/
 │   └── init/
 │       └── init_schema.sql
-├── dbt/
-│   ├── dbt_project.yml
-│   └── models/
-│       ├── staging/
-│       │   ├── schema.yml
-│       │   ├── stg_books.sql
-│       │   ├── stg_amazon.sql
-│       │   ├── stg_americanas.sql
-│       │   └── stg_kabum.sql
-│       └── marts/
-│           ├── schema.yml
-│           ├── dim_books.sql
-│           └── dim_products.sql
 ├── data/
 └── tests/
     └── scraping/
@@ -353,7 +327,25 @@ books.toscrape.com ──→ raw.books     ──→ stg_books     ──→ dim
 amazon.com.br      ──→ raw.amazon    ──→ stg_amazon    ──┐
 americanas.com.br  ──→ raw.americanas──→ stg_americanas──┤→ dim_products
 kabum.com.br       ──→ raw.kabum     ──→ stg_kabum     ──┘
+                                                            │
+                                                            ▼
+                                                     report (CSV/JSON)
 ```
+
+### Tabelas
+
+| Schema | Tabela | Registros | Descricao |
+|--------|--------|-----------|-----------|
+| `raw` | `books` | 12.000 | Livros brutos |
+| `raw` | `amazon` | 535 | Produtos Amazon brutos |
+| `raw` | `americanas` | 248 | Produtos Americanas brutos |
+| `raw` | `kabum` | 250 | Produtos KaBuM brutos |
+| `staging` | `stg_books` | 12.000 | Livros normalizados |
+| `staging` | `stg_amazon` | 535 | Amazon normalizado |
+| `staging` | `stg_americanas` | 248 | Americanas normalizado |
+| `staging` | `stg_kabum` | 250 | KaBuM normalizado |
+| `marts` | `dim_books` | 1.000 | Dimensao de livros |
+| `marts` | `dim_products` | 347 | Dimensao unificada |
 
 ---
 
@@ -369,9 +361,9 @@ kabum.com.br       ──→ raw.kabum     ──→ stg_kabum     ──┘
 - [ ] Spider para Magazine Luiza (requer proxy residencial)
 - [ ] Spider para Casas Bahia (requer proxy residencial)
 
-### 2. Integracao scraping-dbt (curto prazo)
+### 2. Integracao scraping-transform (curto prazo)
 
-- [x] Criar stg_books no dbt
+- [x] Criar stg_books
 - [x] Criar dim_books com metricas
 - [x] Criar stg_amazon
 - [x] Criar stg_americanas
@@ -382,23 +374,24 @@ kabum.com.br       ──→ raw.kabum     ──→ stg_kabum     ──┘
 ### 3. Automacao (medio prazo)
 
 - [x] DAG no Airflow para rodar scraping diario
-- [x] Schedule de `dbt run` apos scraping
+- [x] Schedule de transform apos scraping
+- [x] Load para schema report
 - [ ] Alertas quando scraping falhar
 - [ ] Notificacao via Telegram/Slack
 
 ### 4. Data Quality (medio prazo)
 
-- [ ] Great Expectations ou pandera para validar dados antes de ingerir
+- [x] Testes de qualidade em Python (14/14)
 - [ ] Testes de consistencia entre scraping e banco
-- [ ] Monitoreamento de volume de dados
+- [ ] Monitoramento de volume de dados
 - [ ] Alertas de anomalias (precos, volume, etc)
 
 ### 5. Visualizacao (medio/longo prazo)
 
 - [x] Dashboard com Streamlit conectado ao DW
+- [x] KPIs, graficos, tabelas filtraveis
 - [ ] Notebooks com analises automatizadas
 - [ ] Relatorios periodicos via email
-- [ ] KPIs de e-commerce (ticket medio, conversao, etc)
 
 ### 6. Infraestrutura (longo prazo)
 
@@ -406,3 +399,9 @@ kabum.com.br       ──→ raw.kabum     ──→ stg_kabum     ──┘
 - [x] Deploy do Airflow no Docker
 - [ ] Backup automatico do PostgreSQL
 - [ ] Monitoramento com Prometheus + Grafana
+
+---
+
+## Licenca
+
+MIT License

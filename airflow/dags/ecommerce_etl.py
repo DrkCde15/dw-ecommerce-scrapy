@@ -20,6 +20,7 @@ sys.path.insert(0, "/opt/project/src")
 from pipelines.transform.transform_pipeline import TransformPipeline
 from pipelines.load.load_pipeline import LoadPipeline
 from pipelines.tests.quality_tests import DataQualityTests
+from pipelines.monitoring.monitor import PipelineMonitor
 
 
 default_args = {
@@ -60,6 +61,16 @@ def run_quality_tests():
         raise ValueError("Testes de qualidade falharam!")
 
 
+def run_monitoring():
+    """Executa verificacoes de saude do pipeline."""
+    monitor = PipelineMonitor(
+        postgres_url="postgresql://postgres:postgres@postgres:5432/ecommerce"
+    )
+    results = monitor.run_full_check()
+    if results["status"] == "unhealthy":
+        raise ValueError(f"Pipeline unhealthy: {results['alerts']}")
+
+
 with DAG(
     dag_id="ecommerce_etl",
     default_args=default_args,
@@ -94,5 +105,11 @@ with DAG(
         python_callable=run_quality_tests,
     )
 
-    # Orquestracao: scraping → transformacao → load → validacao
-    run_all_spiders >> transform >> load >> quality_tests
+    # 5. Monitoring: verifica saude do pipeline
+    monitoring = PythonOperator(
+        task_id="monitoring",
+        python_callable=run_monitoring,
+    )
+
+    # Orquestracao: scraping → transformacao → load → validacao → monitoramento
+    run_all_spiders >> transform >> load >> quality_tests >> monitoring
