@@ -217,6 +217,53 @@ podman exec ecommerce_airflow_webserver airflow dags trigger ecommerce_etl
 
 # Ver status da execucao
 podman exec ecommerce_airflow_webserver airflow tasks states-for-dag-run ecommerce_etl <run_id>
+```
+
+## Dashboard
+
+### Acesso
+
+| Servico | URL |
+|---------|-----|
+| Streamlit Dashboard | http://localhost:8501 |
+
+### Secoes do Dashboard
+
+| Secao | Descricao |
+|-------|-----------|
+| KPIs Gerais | Total de produtos, preco medio, min/max |
+| Volume de Scraping | Produtos por fonte (grafico de barras) |
+| Analise de Precos | Distribuicao por fonte (boxplot + histograma) |
+| Comparacao entre Fontes | Preco medio por fonte, scatter plot |
+| Lista de Produtos | Tabela com todos os produtos filtraveis |
+
+### Filtros
+
+- **Fontes**: Selecionar quais fontes exibir (Books, Amazon, Americanas, KaBuM)
+- **Faixa de Preco**: Filtrar por intervalo de preco
+
+### Rodar localmente
+
+```bash
+# Instalar dependencias
+pip install -r requirements.txt
+
+# Iniciar PostgreSQL
+podman-compose up -d postgres
+
+# Rodar Streamlit
+streamlit run dashboard/app.py
+```
+
+### Rodar via Docker
+
+```bash
+# Subir tudo (PostgreSQL + Airflow + Dashboard)
+podman-compose up -d
+
+# Ou apenas o dashboard
+podman-compose up -d dashboard
+```
 
 # Parar tudo
 podman-compose down
@@ -255,6 +302,10 @@ podman exec -it postgres psql -U postgres -d ecommerce
 │   │   ├── ecommerce_etl.py
 │   │   └── run_spiders.sh
 │   └── logs/
+├── dashboard/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── app.py
 ├── configs/
 │   ├── books_toscrape.yml
 │   └── mercadolivre_celulares.json
@@ -344,7 +395,7 @@ kabum.com.br       ──→ raw.kabum     ──→ stg_kabum     ──┘
 
 ### 5. Visualizacao (medio/longo prazo)
 
-- [ ] Dashboard com Metabase ou Superset conectado ao DW
+- [x] Dashboard com Streamlit conectado ao DW
 - [ ] Notebooks com analises automatizadas
 - [ ] Relatorios periodicos via email
 - [ ] KPIs de e-commerce (ticket medio, conversao, etc)
