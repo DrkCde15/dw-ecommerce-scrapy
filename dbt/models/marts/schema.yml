@@ -1,32 +1,8 @@
 version: 2
 
 models:
-  - name: dim_customers
-    description: "Dimensão de clientes com métricas agregadas"
-    columns:
-      - name: customer_id
-        description: "Identificador único do cliente"
-        tests:
-          - unique
-          - not_null
-      - name: first_name
-        description: "Primeiro nome do cliente"
-      - name: last_name
-        description: "Sobrenome do cliente"
-      - name: email
-        description: "E-mail do cliente"
-        tests:
-          - unique
-          - not_null
-      - name: total_orders
-        description: "Total de pedidos do cliente"
-      - name: total_spent
-        description: "Valor total gasto pelo cliente"
-      - name: customer_segment
-        description: "Segmento do cliente (VIP, Recorrente, Novo)"
-
   - name: dim_products
-    description: "Dimensão unificada de produtos de todas as fontes (Americanas, KaBuM, Amazon)"
+    description: "Dimensao unificada de produtos de todas as fontes (Americanas, KaBuM, Amazon)"
     columns:
       - name: id
         description: "Identificador surrogate key (product_id + source)"
@@ -44,11 +20,11 @@ models:
       - name: brand
         description: "Marca do produto"
       - name: price
-        description: "Preço atual do produto"
+        description: "Preco atual do produto"
         tests:
           - not_null
       - name: original_price
-        description: "Preço original (antes de desconto)"
+        description: "Preco original (antes de desconto)"
       - name: discount_percentage
         description: "Percentual de desconto"
       - name: category
@@ -70,33 +46,11 @@ models:
       - name: scraped_at
         description: "Data/hora da raspagem"
 
-  - name: fact_orders
-    description: "Tabela fato de pedidos"
-    columns:
-      - name: order_id
-        description: "Identificador único do pedido"
-        tests:
-          - not_null
-      - name: customer_id
-        description: "Identificador do cliente"
-        tests:
-          - not_null
-      - name: product_id
-        description: "Identificador do produto"
-        tests:
-          - not_null
-      - name: quantity
-        description: "Quantidade solicitada"
-      - name: unit_price
-        description: "Preço unitário"
-      - name: total_price
-        description: "Preço total do item"
-
   - name: dim_books
-    description: "Dimensão de livros raspados via Scrapy com métricas e classificações"
+    description: "Dimensao de livros raspados via Scrapy com metricas e classificacoes"
     columns:
       - name: book_id
-        description: "Identificador único do livro"
+        description: "Identificador unico do livro"
         tests:
           - unique
           - not_null
@@ -109,16 +63,16 @@ models:
         tests:
           - not_null
       - name: price
-        description: "Preço do livro"
+        description: "Preco do livro"
         tests:
           - not_null
       - name: rating
-        description: "Avaliação (1-5)"
+        description: "Avaliacao (1-5)"
         tests:
           - not_null
       - name: rating_label
-        description: "Label da avaliação (Excelente, Bom, Regular, Ruim)"
+        description: "Label da avaliacao (Excelente, Bom, Regular, Ruim)"
       - name: category
         description: "Categoria do livro"
       - name: price_vs_category
-        description: "Comparação do preço com a média da categoria"
+        description: "Comparacao do preco com a media da categoria"
