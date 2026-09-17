@@ -3,13 +3,23 @@ DAG para execucao diaria do ETL de e-commerce.
 
 Fluxo:
 1. Scrapy spiders coletam dados → PostgreSQL (raw)
-2. dbt run transforma raw → staging → marts
-3. dbt test valida qualidade dos dados
+2. Python transforma raw → staging → marts
+3. Python valida qualidade dos dados
 """
 
+import sys
+import os
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
+
+# Adicionar src ao path
+sys.path.insert(0, "/opt/project/src")
+
+from pipelines.transform import TransformPipeline
+from pipelines.tests import DataQualityTests
+
 
 default_args = {
     "owner": "admin",
@@ -20,16 +30,34 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
-DBT_CMD = "cd /opt/project/dbt && dbt --profiles-dir /opt/airflow/dbt"
+
+def run_transform():
+    """Executa todas as transformacoes."""
+    pipeline = TransformPipeline(
+        postgres_url="postgresql://postgres:postgres@postgres:5432/ecommerce"
+    )
+    results = pipeline.run_all()
+    print(f"Transformacoes concluidas: {results}")
+
+
+def run_quality_tests():
+    """Executa testes de qualidade."""
+    tests = DataQualityTests(
+        postgres_url="postgresql://postgres:postgres@postgres:5432/ecommerce"
+    )
+    success = tests.run_all_tests()
+    if not success:
+        raise ValueError("Testes de qualidade falharam!")
+
 
 with DAG(
     dag_id="ecommerce_etl",
     default_args=default_args,
-    description="ETL diario de e-commerce: scraping + dbt run + dbt test",
+    description="ETL diario de e-commerce: scraping + transform + quality tests",
     schedule_interval="0 6 * * *",
     start_date=datetime(2024, 1, 1),
     catchup=False,
-    tags=["ecommerce", "scraping", "dbt"],
+    tags=["ecommerce", "scraping", "python"],
 ) as dag:
 
     # 1. Scrapy: coleta dados e salva no PostgreSQL
@@ -38,17 +66,17 @@ with DAG(
         bash_command="bash /opt/airflow/dags/run_spiders.sh;",
     )
 
-    # 2. dbt run: transforma raw → staging → marts
-    dbt_run = BashOperator(
-        task_id="dbt_run",
-        bash_command=f"{DBT_CMD} run --profiles-dir /opt/project/dbt --project-dir /opt/project/dbt;",
+    # 2. Transform: raw → staging → marts
+    transform = PythonOperator(
+        task_id="transform",
+        python_callable=run_transform,
     )
 
-    # 3. dbt test: valida qualidade dos dados
-    dbt_test = BashOperator(
-        task_id="dbt_test",
-        bash_command=f"{DBT_CMD} test --profiles-dir /opt/airflow/dbt --project-dir /opt/project/dbt;",
+    # 3. Quality Tests: valida qualidade dos dados
+    quality_tests = PythonOperator(
+        task_id="quality_tests",
+        python_callable=run_quality_tests,
     )
 
     # Orquestracao: scraping → transformacao → validacao
-    run_all_spiders >> dbt_run >> dbt_test
+    run_all_spiders >> transform >> quality_tests
